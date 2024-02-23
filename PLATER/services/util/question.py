@@ -201,7 +201,7 @@ class Question:
         self._question_json = Question.apply_attribute_constraints(self._question_json)
 
         # Tuck the Neo4j query duration into the TRAPI Response
-        self._question_json["query_duration"] = {"neo4j": neo4j_duration}
+        self._question_json["neo4j_duration"] = neo4j_duration
 
         return self._question_json
 
