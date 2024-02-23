@@ -184,9 +184,9 @@ class Question:
         # create a probably-unique id to be associated with this query in the logs
         query_logging_id = token_hex(10)
         logger.info(f"querying neo4j for query {query_logging_id}, trapi: {trapi_query}")
-        start_time = time.time()
+        neo4j_start_time = time.time()
         results = await graph_interface.run_cypher(cypher_query)
-        neo4j_duration = time.time() - start_time
+        neo4j_duration = time.time() - neo4j_start_time
         logger.info(f"returned results from neo4j for {query_logging_id}, neo4j_duration: {neo4j_duration}")
         if otel_span is not None:
             otel_span.set_attributes(
@@ -199,6 +199,10 @@ class Question:
         results_dict = graph_interface.convert_to_dict(results)
         self._question_json.update(self.transform_attributes(results_dict[0], graph_interface))
         self._question_json = Question.apply_attribute_constraints(self._question_json)
+
+        # Tuck the Neo4j query duration into the TRAPI Response
+        self._question_json["query_duration"] = {"neo4j": neo4j_duration}
+
         return self._question_json
 
     @staticmethod
