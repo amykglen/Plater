@@ -36,7 +36,7 @@ class Neo4jHTTPDriver:
         logger.debug(f'SUPPORTS APOC : {self._supports_apoc}')
 
     async def post_request_json(self, payload, timeout=600):
-        timeout_obj = httpx.Timeout(connect=timeout, read=timeout, write=timeout)
+        timeout_obj = httpx.Timeout(timeout, read=timeout)
         async with httpx.AsyncClient(timeout=timeout_obj) as session:
             response = await session.post(self._full_transaction_path, json=payload, headers=self._header)
             if response.status_code != 200:
@@ -114,7 +114,7 @@ class Neo4jHTTPDriver:
                 }
             ]
         }
-        timeout_obj = httpx.Timeout(connect=1500, read=1500, write=1500)
+        timeout_obj = httpx.Timeout(1500, read=1500)
         response = httpx.post(
             self._full_transaction_path,
             headers=self._header,
