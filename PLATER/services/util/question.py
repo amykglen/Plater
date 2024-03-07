@@ -179,18 +179,16 @@ class Question:
 
         # compile a cypher query and return a string
         cypher_query = self.compile_cypher(**{"use_hints": True, "relationship_id": "internal", "primary_ks_required": True})
-        cypher_query = f"{cypher_query} LIMIT 1000"  # Temporary for debugging
-        logger.info(f"Cypher query is {cypher_query}")
         # convert the incoming TRAPI query into a string for logging and tracing
         trapi_query = str(orjson.dumps(self._question_json), "utf-8")
         # create a probably-unique id to be associated with this query in the logs
         query_logging_id = token_hex(10)
         logger.info(f"querying neo4j for query {query_logging_id}, trapi: {trapi_query}")
+        logger.info(f"Cypher query is {cypher_query}")
         neo4j_start_time = time.time()
         results = await graph_interface.run_cypher(cypher_query)
         neo4j_duration = time.time() - neo4j_start_time
-        logger.info(f"returned {len(results) if results else None} results from neo4j for {query_logging_id}, "
-                    f"neo4j_duration: {neo4j_duration}")
+        logger.info(f"returned results from neo4j for {query_logging_id}, neo4j_duration: {neo4j_duration}")
         if otel_span is not None:
             otel_span.set_attributes(
                 {
