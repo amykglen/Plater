@@ -7,7 +7,7 @@ set +a
 # Configure these for large graphs.
 # When using gunicorn worker will time-out for long running operations.
 NUM_WORKERS=${NUM_WORKERS:-4}
-WORKER_TIMEOUT=${WORKER_TIMEOUT:-7200}
+WORKER_TIMEOUT=${WORKER_TIMEOUT:-3600}
 
 
 function webServer {

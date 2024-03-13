@@ -35,7 +35,7 @@ class Neo4jHTTPDriver:
         self.check_apoc_support()
         logger.debug(f'SUPPORTS APOC : {self._supports_apoc}')
 
-    async def post_request_json(self, payload, timeout=7200):
+    async def post_request_json(self, payload, timeout=3600):
         timeout_obj = httpx.Timeout(timeout, read=timeout)
         async with httpx.AsyncClient(timeout=timeout_obj) as session:
             response = await session.post(self._full_transaction_path, json=payload, headers=self._header)
@@ -73,7 +73,7 @@ class Neo4jHTTPDriver:
             logger.debug(traceback.print_exc())
             raise RuntimeError('Connection to Neo4j could not be established.')
 
-    async def run(self, query, return_errors=False, timeout=7200):
+    async def run(self, query, return_errors=False, timeout=3600):
         """
         Runs a neo4j query async.
         :param timeout: http timeout for queries sent to neo4j
@@ -114,7 +114,7 @@ class Neo4jHTTPDriver:
                 }
             ]
         }
-        timeout_obj = httpx.Timeout(7200, read=7200)
+        timeout_obj = httpx.Timeout(3600, read=3600)
         response = httpx.post(
             self._full_transaction_path,
             headers=self._header,
@@ -501,7 +501,7 @@ class GraphInterface:
 
     instance = None
 
-    def __init__(self, host, port, auth, query_timeout=7200, bl_version="3.1"):
+    def __init__(self, host, port, auth, query_timeout=3600, bl_version="3.1"):
         # create a new instance if not already created.
         if not GraphInterface.instance:
             GraphInterface.instance = GraphInterface._GraphInterface(host=host,
