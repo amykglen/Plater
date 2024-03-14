@@ -62,12 +62,11 @@ class Question:
         cypher_query = get_query(query_graph, **kwargs)
 
         # Up subclass_of reasoning to look at up to 20 hops (same as Plover; this is for testing purposes)
-        if cypher_query.count("*0..1") == 1:
+        if "`biolink:subclass_of`*0..1" in cypher_query:
             logger.info(f"Editing cypher to up subclass_of max hops from 1 to 20")
-            cypher_query = cypher_query.replace("*0..1", "*0..20")
+            cypher_query = cypher_query.replace("`biolink:subclass_of`*0..1", "`biolink:subclass_of`*0..20")
         else:
-            logger.info(f"More than one edge in the cypher query is variable length... not sure which "
-                        f"refers to subclass_of edges. Will skip modifying.")
+            logger.info(f"No subclass_of edges were detected in the cypher query, so not modifying the cypher.")
 
         return cypher_query
 
