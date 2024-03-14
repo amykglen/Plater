@@ -59,8 +59,17 @@ class Question:
                 for qualifier in edges[e]['qualifier_constraints']:
                     for item in qualifier['qualifier_set']:
                         item['qualifier_type_id'] = item['qualifier_type_id'].replace('biolink:', '')
-        return get_query(query_graph, **kwargs)
+        cypher_query = get_query(query_graph, **kwargs)
 
+        # Up subclass_of reasoning to look at up to 20 hops (same as Plover; this is for testing purposes)
+        if cypher_query.count("*0..1") == 1:
+            logger.info(f"Editing cypher to up subclass_of max hops from 1 to 20")
+            cypher_query.replace("*0..1", "*0..20")
+        else:
+            logger.info(f"More than one edge in the cypher query is variable length... not sure which "
+                        f"refers to subclass_of edges. Will skip modifying.")
+
+        return cypher_query
 
     def _construct_sources_tree(self, sources):
         # if primary source and aggregator source are specified in the graph, upstream_resource_ids of all aggregator_ks
