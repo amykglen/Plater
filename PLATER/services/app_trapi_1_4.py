@@ -1,5 +1,4 @@
 """FastAPI app."""
-import time
 
 from fastapi import Body, Depends, FastAPI, Response
 from fastapi.encoders import jsonable_encoder
@@ -86,7 +85,6 @@ async def reasoner_api(
         graph_interface: GraphInterface = Depends(get_graph_interface),
 ) -> CustomORJSONResponse:
     """Handle TRAPI request."""
-    start = time.time()
     request_json = request.dict(by_alias=True)
     # default workflow
     workflow = request_json.get('workflow') or [{"id": "lookup"}]
@@ -95,11 +93,7 @@ async def reasoner_api(
         question = Question(request_json["message"])
         try:
             response_message = await question.answer(graph_interface)
-            neo4j_duration = response_message["neo4j_duration"]
-            del response_message["neo4j_duration"]  # Delete since additional properties aren't allowed on Message
-            request_json.update({'message': response_message,
-                                 'workflow': workflow,
-                                 'query_duration': {'neo4j': neo4j_duration}})
+            request_json.update({'message': response_message, 'workflow': workflow})
         except InvalidPredicateError as e:
             return CustomORJSONResponse(status_code=400, content={"description": str(e)})
     elif 'overlay_connect_knodes' in workflows:
@@ -110,13 +104,6 @@ async def reasoner_api(
         overlay = Overlay(graph_interface=graph_interface)
         response_message = await overlay.annotate_node(request_json['message'])
         request_json.update({'message': response_message, 'workflow': workflow})
-
-    # Tuck the overall query duration into the TRAPI Response
-    duration = time.time() - start
-    if request_json.get('query_duration'):
-        request_json['query_duration']['overall'] = duration
-    else:
-        request_json['query_duration'] = {'overall': duration}
 
     # we are intentionally returning a CustomORJSONResponse and not a pydantic model for performance reasons
     json_response = CustomORJSONResponse(content=request_json, media_type="application/json")
