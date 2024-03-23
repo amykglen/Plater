@@ -61,12 +61,12 @@ class Question:
                         item['qualifier_type_id'] = item['qualifier_type_id'].replace('biolink:', '')
         cypher_query = get_query(query_graph, **kwargs)
 
-        # Up subclass_of reasoning to look at up to 20 hops (same as Plover; this is for testing purposes)
-        if "`biolink:subclass_of`*0..1" in cypher_query:
-            logger.info(f"Editing cypher to up subclass_of max hops from 1 to 20")
-            cypher_query = cypher_query.replace("`biolink:subclass_of`*0..1", "`biolink:subclass_of`*0..20")
-        else:
-            logger.info(f"No subclass_of edges were detected in the cypher query, so not modifying the cypher.")
+        # Modify the cypher subclass_of depth as requested in .env
+        neo4j_subclass_depth = int(config.get('NEO4J_SUBCLASS_DEPTH', 1))
+        if '`biolink:subclass_of`*0..1' in cypher_query and neo4j_subclass_depth > 1:
+            logger.debug(f'Editing cypher query to up subclass_of max depth from 1 to {neo4j_subclass_depth}..')
+            cypher_query = cypher_query.replace('`biolink:subclass_of`*0..1',
+                                                f'`biolink:subclass_of`*0..{neo4j_subclass_depth}')
 
         return cypher_query
 
