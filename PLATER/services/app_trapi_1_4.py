@@ -1,5 +1,4 @@
 """FastAPI app."""
-
 from fastapi import Body, Depends, FastAPI, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import ORJSONResponse

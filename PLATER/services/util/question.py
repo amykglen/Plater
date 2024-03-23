@@ -199,7 +199,6 @@ class Question:
         results_dict = graph_interface.convert_to_dict(results)
         self._question_json.update(self.transform_attributes(results_dict[0], graph_interface))
         self._question_json = Question.apply_attribute_constraints(self._question_json)
-
         return self._question_json
 
     @staticmethod
