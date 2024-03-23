@@ -59,8 +59,15 @@ class Question:
                 for qualifier in edges[e]['qualifier_constraints']:
                     for item in qualifier['qualifier_set']:
                         item['qualifier_type_id'] = item['qualifier_type_id'].replace('biolink:', '')
-        return get_query(query_graph, **kwargs)
+        cypher_query = get_query(query_graph, **kwargs)
 
+        # Modify the cypher subclass_of depth as requested in .env
+        neo4j_subclass_depth = int(config.get('NEO4J_SUBCLASS_DEPTH', 1))
+        if '`biolink:subclass_of`*0..1' in cypher_query and neo4j_subclass_depth > 1:
+            logger.debug(f'Editing cypher query to up subclass_of max depth from 1 to {neo4j_subclass_depth}..')
+            cypher_query = cypher_query.replace('`biolink:subclass_of`*0..1',
+                                                f'`biolink:subclass_of`*0..{neo4j_subclass_depth}')
+        return cypher_query
 
     def _construct_sources_tree(self, sources):
         # if primary source and aggregator source are specified in the graph, upstream_resource_ids of all aggregator_ks
