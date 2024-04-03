@@ -48,6 +48,8 @@ class Question:
 
         # self.toolkit = toolkit
         self.provenance = config.get('PROVENANCE_TAG', 'infores:automat.notspecified')
+        self.results_limit = config.get('RESULTS_LIMIT', None)
+        self.subclass_depth = config.get('SUBCLASS_DEPTH', None)
 
     def compile_cypher(self, **kwargs):
         query_graph = copy.deepcopy(self._question_json[Question.QUERY_GRAPH_KEY])
@@ -59,16 +61,7 @@ class Question:
                 for qualifier in edges[e]['qualifier_constraints']:
                     for item in qualifier['qualifier_set']:
                         item['qualifier_type_id'] = item['qualifier_type_id'].replace('biolink:', '')
-        cypher_query = get_query(query_graph, **kwargs)
-
-        # Modify the cypher subclass_of depth as requested in .env
-        neo4j_subclass_depth = int(config.get('NEO4J_SUBCLASS_DEPTH', 1))
-        if '`biolink:subclass_of`*0..1' in cypher_query and neo4j_subclass_depth > 1:
-            logger.debug(f'Editing cypher query to up subclass_of max depth from 1 to {neo4j_subclass_depth}..')
-            cypher_query = cypher_query.replace('`biolink:subclass_of`*0..1',
-                                                f'`biolink:subclass_of`*0..{neo4j_subclass_depth}')
-
-        return cypher_query
+        return get_query(query_graph, **kwargs)
 
     def _construct_sources_tree(self, sources):
         # if primary source and aggregator source are specified in the graph, upstream_resource_ids of all aggregator_ks
@@ -186,7 +179,10 @@ class Question:
             otel_span = None
 
         # compile a cypher query and return a string
-        cypher_query = self.compile_cypher(**{"use_hints": True, "relationship_id": "internal", "primary_ks_required": True})
+        cypher_query = self.compile_cypher(**{"use_hints": True,
+                                              "relationship_id": "internal",
+                                              "limit": self.results_limit,
+                                              "subclass_depth": self.subclass_depth})
         # convert the incoming TRAPI query into a string for logging and tracing
         trapi_query = str(orjson.dumps(self._question_json), "utf-8")
         # create a probably-unique id to be associated with this query in the logs
