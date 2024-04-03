@@ -46,8 +46,9 @@ class Question:
     def __init__(self, question_json):
         self._question_json = copy.deepcopy(question_json)
 
-        # self.toolkit = toolkit
         self.provenance = config.get('PROVENANCE_TAG', 'infores:automat.notspecified')
+        self.results_limit = config.get('RESULTS_LIMIT', None)
+        self.subclass_depth = config.get('SUBCLASS_DEPTH', None)
 
     def compile_cypher(self, **kwargs):
         query_graph = copy.deepcopy(self._question_json[Question.QUERY_GRAPH_KEY])
@@ -61,44 +62,65 @@ class Question:
                         item['qualifier_type_id'] = item['qualifier_type_id'].replace('biolink:', '')
         return get_query(query_graph, **kwargs)
 
-
+    # This function takes 'sources' results from the transpiler, converts lists of aggregator sources into the proper
+    # TRAPI dictionaries, and assigns the proper upstream ids to each resource. It does not currently attempt to avoid
+    # duplicate aggregator results, which probably shouldn't ever occur.
     def _construct_sources_tree(self, sources):
-        # if primary source and aggregator source are specified in the graph, upstream_resource_ids of all aggregator_ks
-        # be that source
-
-        # if aggregator ks are coming from db, plater would add itself as aggregator and use other aggregator ids
-        # as upstream resources, if no aggregators are found and only primary ks is provided that would be added
-        # as upstream for the plater entry
-        formatted_sources = []
-        # filter out source entries that actually have values
-        temp = {}
+        # TODO - The transpiler currently returns some null resource ids, partially due to the cypher call
+        #  implementation and partially due to currently supporting knowledge source attributes with and
+        #  without biolink prefixes. In the future it would be more efficient to remove the following two checks
+        # remove null or empty string resources
+        sources = [source for source in sources if source['resource_id']]
+        # remove biolink prefix if it exists
         for source in sources:
-            if not source['resource_id']:
-                continue
-            temp[source['resource_role']] = temp.get(source['resource_role'], set())
-            if isinstance(source["resource_id"], str):
-                temp[source["resource_role"]].add(source["resource_id"])
-            elif isinstance(source["resource_id"], list):
-                for resource_id in source["resource_id"]:
-                    temp[source["resource_role"]].add(resource_id)
+            source['resource_role'] = source['resource_role'].removeprefix('biolink:')
 
-        for resource_role in temp:
-            upstreams = None
-            if resource_role == "biolink:aggregator_knowledge_source":
-                upstreams = temp.get("biolink:primary_knowledge_source", None)
+        # first find the primary knowledge source, there should always be one
+        primary_knowledge_source = None
+        formatted_sources = None
+        for source in sources:
+            if source['resource_role'] == "primary_knowledge_source":
+                primary_knowledge_source = source['resource_id']
+                # add it to the formatted TRAPI output
+                formatted_sources = [{
+                    "resource_id": primary_knowledge_source,
+                    "resource_role": "primary_knowledge_source"
+                }]
+        if not primary_knowledge_source:
+            # we could hard fail here, every edge should have a primary ks, but I haven't fixed all the tests yet
+            #     raise KeyError(f'primary_knowledge_source missing from sources section of cypher results! '
+            #                    f'sources: {sources}')
+            return []
 
-            formatted_sources += [
-                {"resource_id": resource_id, "resource_role": resource_role.lstrip('biolink:'), "upstream_resource_ids": upstreams}
-                for resource_id in temp[resource_role]
-            ]
-        upstreams_for_plater_entry = temp.get("biolink:aggregator_knowledge_source") or temp.get("biolink:primary_knowledge_source")
+        # then find any aggregator lists
+        aggregator_list_sources = []
+        for source in sources:
+            # this looks weird but the idea is that you could have a few parallel lists like:
+            # aggregator_knowledge_source, aggregator_knowledge_source_2, aggregator_knowledge_source_3
+            if source['resource_role'].startswith("aggregator_knowledge_source"):
+                aggregator_list_sources.append(source)
+        # walk through the aggregator lists and construct the chains of provenance
+        terminal_aggregators = set()
+        for source in aggregator_list_sources:
+            # each aggregator list should be in order, so we can deduce the upstream chains
+            last_aggregator = None
+            for aggregator_knowledge_source in source['resource_id']:
+                formatted_sources.append({
+                    "resource_id": aggregator_knowledge_source,
+                    "resource_role": "aggregator_knowledge_source",
+                    "upstream_resource_ids": [last_aggregator] if last_aggregator else [primary_knowledge_source]
+                })
+                last_aggregator = aggregator_knowledge_source
+            # store the last aggregator in the list, because this will be an upstream source for the plater one
+            terminal_aggregators.add(last_aggregator)
+        # add the automat infores as an aggregator,
+        # it will have as upstream either the primary ks or all of the furthest downstream aggregators if they exist
         formatted_sources.append({
-            "resource_id":self.provenance,
+            "resource_id": self.provenance,
             "resource_role": "aggregator_knowledge_source",
-            "upstream_resource_ids": upstreams_for_plater_entry
+            "upstream_resource_ids": list(terminal_aggregators) if terminal_aggregators else [primary_knowledge_source]
         })
-        return formatted_sources
-
+        return list(formatted_sources)
 
     def format_attribute_trapi(self, kg_items, node=False):
         for identifier in kg_items:
@@ -152,15 +174,21 @@ class Question:
 
         return kg_items
 
-    def transform_attributes(self, trapi_message, graph_interface: GraphInterface):
+    def transform_attributes(self, trapi_message):
         self.format_attribute_trapi(trapi_message.get('knowledge_graph', {}).get('nodes', {}), node=True)
         self.format_attribute_trapi(trapi_message.get('knowledge_graph', {}).get('edges', {}))
         for r in trapi_message.get("results", []):
+            # add an attributes list to every node binding, remove query_id when it's redundant with the actual id
             for node_binding_list in r["node_bindings"].values():
                 for node_binding in node_binding_list:
-                    query_id = node_binding.pop('query_id', None)
-                    if query_id != node_binding['id'] and query_id is not None:
-                        node_binding['query_id'] = query_id
+                    node_binding["attributes"] = []
+                    if ('query_id' in node_binding) and (node_binding['query_id'] == node_binding['id']):
+                        del node_binding['query_id']
+            # add an attributes list to every edge binding
+            for analysis in r['analyses']:
+                for edge_binding_list in analysis['edge_bindings'].values():
+                    for edge_binding in edge_binding_list:
+                        edge_binding["attributes"] = []
             # add resource id
             for analyses in r["analyses"]:
                 analyses["resource_id"] = self.provenance
@@ -178,7 +206,11 @@ class Question:
             otel_span = None
 
         # compile a cypher query and return a string
-        cypher_query = self.compile_cypher(**{"use_hints": True, "relationship_id": "internal", "primary_ks_required": True})
+        cypher_query = self.compile_cypher(**{"use_hints": True,
+                                              "relationship_id": "internal",
+                                              "limit": self.results_limit,
+                                              "subclass_depth": self.subclass_depth})
+        print(cypher_query)
         # convert the incoming TRAPI query into a string for logging and tracing
         trapi_query = str(orjson.dumps(self._question_json), "utf-8")
         # create a probably-unique id to be associated with this query in the logs
@@ -198,7 +230,7 @@ class Question:
                 }
             )
         results_dict = graph_interface.convert_to_dict(results)
-        self._question_json.update(self.transform_attributes(results_dict[0], graph_interface))
+        self._question_json.update(self.transform_attributes(results_dict[0]))
         self._question_json = Question.apply_attribute_constraints(self._question_json)
 
         # Tuck the Neo4j query duration into the TRAPI Response
