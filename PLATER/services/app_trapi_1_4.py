@@ -93,7 +93,10 @@ async def reasoner_api(
         question = Question(request_json["message"])
         try:
             response_message = await question.answer(graph_interface)
-            request_json.update({'message': response_message, 'workflow': workflow})
+            neo4j_duration = response_message["neo4j_duration"]
+            del response_message["neo4j_duration"]  # Delete since additional properties aren't allowed on Message
+            request_json.update({'message': response_message, 'workflow': workflow,
+                                 'query_duration': {'neo4j': neo4j_duration}})
         except InvalidPredicateError as e:
             return CustomORJSONResponse(status_code=400, content={"description": str(e)}, media_type="application/json")
         except InvalidQualifierError as e:
