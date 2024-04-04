@@ -68,6 +68,13 @@ class Question:
             cypher_query = cypher_query.replace('`biolink:subclass_of`*0..1',
                                                 f'`biolink:subclass_of`*0..{neo4j_subclass_depth}')
 
+        # Modify the cypher to add a results limit, if specified in .env
+        results_limit = int(config.get('RESULTS_LIMIT', None))
+        if results_limit:
+            logger.debug(f'Editing cypher query to add a results limit of {results_limit}')
+            cypher_query = cypher_query.replace('UNWIND knowledge_graph.nodes',
+                                                f'LIMIT {results_limit} UNWIND knowledge_graph.nodes')
+
         return cypher_query
 
     def _construct_sources_tree(self, sources):
