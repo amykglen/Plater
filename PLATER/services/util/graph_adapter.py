@@ -35,9 +35,8 @@ class Neo4jHTTPDriver:
         self.check_apoc_support()
         logger.debug(f'SUPPORTS APOC : {self._supports_apoc}')
 
-    async def post_request_json(self, payload, timeout=3600):
-        timeout_obj = httpx.Timeout(timeout, read=timeout)
-        async with httpx.AsyncClient(timeout=timeout_obj) as session:
+    async def post_request_json(self, payload, timeout=600):
+        async with httpx.AsyncClient(timeout=timeout) as session:
             response = await session.post(self._full_transaction_path, json=payload, headers=self._header)
             if response.status_code != 200:
                 logger.error(f"[x] Problem contacting Neo4j server {self._host}:{self._port} -- {response.status_code}")
@@ -73,7 +72,7 @@ class Neo4jHTTPDriver:
             logger.debug(traceback.print_exc())
             raise RuntimeError('Connection to Neo4j could not be established.')
 
-    async def run(self, query, return_errors=False, timeout=3600):
+    async def run(self, query, return_errors=False, timeout=600):
         """
         Runs a neo4j query async.
         :param timeout: http timeout for queries sent to neo4j
@@ -106,7 +105,6 @@ class Neo4jHTTPDriver:
         :param query:
         :return:
         """
-
         payload = {
             "statements": [
                 {
@@ -114,11 +112,10 @@ class Neo4jHTTPDriver:
                 }
             ]
         }
-        timeout_obj = httpx.Timeout(3600, read=3600)
         response = httpx.post(
             self._full_transaction_path,
             headers=self._header,
-            timeout=timeout_obj,
+            timeout=1500,
             json=payload).json()
         errors = response.get('errors')
         if errors:
@@ -501,7 +498,7 @@ class GraphInterface:
 
     instance = None
 
-    def __init__(self, host, port, auth, query_timeout=3600, bl_version="3.1"):
+    def __init__(self, host, port, auth, query_timeout=600, bl_version="3.1"):
         # create a new instance if not already created.
         if not GraphInterface.instance:
             GraphInterface.instance = GraphInterface._GraphInterface(host=host,
